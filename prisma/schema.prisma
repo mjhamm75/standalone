@@ -1,0 +1,438 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider      = "prisma-client-js"
+  output        = "../cdk/lambdas/layers/common/prisma"
+  binaryTargets = ["native", "rhel-openssl-1.0.x", "linux-musl-arm64-openssl-3.0.x", "debian-openssl-3.0.x"]
+}
+
+model ApplicationFormUrl {
+  id        Int       @id @default(autoincrement())
+  userId    String    @map("user_id")
+  formId    String?   @map("form_id")
+  complete  Boolean   @default(false)
+  status    String?   @map("status")
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @default(now()) @map("updated_at")
+  deletedAt DateTime? @map("deleted_at")
+
+  @@index([userId])
+  @@map("application_form_urls")
+}
+
+model TeamSetting {
+  id                              String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  companySlug                     String    @map("company_slug")
+  company                         Company   @relation(fields: [companySlug], references: [slug])
+  requireMemoOverCents            Int?      @map("require_memo_over_cents")
+  requireReceiptOverCents         Int?      @map("require_receipt_over_cents")
+  approvalRequiredProject         Boolean   @default(true) @map("approval_required_project")
+  notifyLargeTransactionsCents    Int?      @map("notify_large_transactions_cents")
+  notifyProjectBudgetUnderPercent Int?      @map("notify_project_budget_under_percent")
+  createdAt                       DateTime  @default(now()) @map("created_at")
+  updatedAt                       DateTime  @updatedAt @map("updated_at")
+  visited                         DateTime?
+  completedOnboarding             DateTime? @map("completed_onboarding")
+  visitedVendorDiscounts          DateTime? @map("visited_vendor_discounts")
+  deletedAt                       DateTime? @map("deleted_at")
+
+  @@unique([companySlug])
+  @@map("team_settings")
+}
+
+model Project {
+  id                     String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  companySlug            String        @map("company_slug")
+  company                Company       @relation(fields: [companySlug], references: [slug])
+  name                   String
+  description            String?
+  budgetCents            Int?          @map("budget_cents")
+  approved               Boolean       @default(false)
+  approvedAt             DateTime?     @map("approved_at")
+  rejectedAt             DateTime?     @map("rejected_at")
+  cardId                 BigInt?       @map("card_id")
+  archived               DateTime?
+  createdAt              DateTime      @default(now()) @map("created_at")
+  updatedAt              DateTime      @updatedAt @map("updated_at")
+  projectBudgetLimitSent DateTime?     @map("project_budget_limit_sent")
+  requesterUserId        String?       @map("requester_user_id")
+  address                Json?         @map("address")
+  clientInfo             Json?         @map("client_info")
+  projectUsers           ProjectUser[]
+  status                 String        @default("active")
+  tags                   Json[]
+  deletedAt              DateTime?     @map("deleted_at")
+
+  @@index([companySlug])
+  @@map("projects")
+}
+
+model ProjectUser {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  projectId String   @map("project_id") @db.Uuid
+  project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  userId    String   @map("user_id")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@unique([projectId, userId])
+  @@index([projectId])
+  @@index([userId])
+  @@map("project_users")
+}
+
+model UserInvite {
+  id              String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  companySlug     String    @map("company_slug")
+  company         Company   @relation(fields: [companySlug], references: [slug])
+  invitedEmail    String    @map("invited_email")
+  invitedByUserId String?   @map("invited_by_user_id")
+  status          String    @default("pending")
+  role            String    @default("member")
+  token           String
+  tokenCreatedAt  DateTime  @default(now()) @map("token_created_at")
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
+  deletedAt       DateTime? @map("deleted_at")
+
+  @@unique([invitedEmail, token])
+  @@map("user_invites")
+}
+
+model UserPermission {
+  id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId      String   @map("user_id")
+  companySlug String   @map("company_slug")
+  company     Company  @relation(fields: [companySlug], references: [slug])
+  role        String
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  @@unique([userId, companySlug])
+  @@index([userId])
+  @@index([companySlug])
+  @@map("user_permissions")
+}
+
+model CardRequest {
+  id              String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  companySlug     String    @map("company_slug")
+  company         Company   @relation(fields: [companySlug], references: [slug])
+  requestStatus   String    @map("request_status")
+  requesterUserId String    @map("user_id")
+  cardName        String    @map("card_name")
+  address         Json      @map("address")
+  virtual         Boolean   @default(false)
+  approvedBy      String?   @map("approved_by")
+  rejectedBy      String?   @map("rejected_by")
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
+  deletedAt       DateTime? @map("deleted_at")
+
+  @@index([companySlug])
+  @@index([requesterUserId])
+  @@map("card_requests")
+}
+
+model Tag {
+  id          String
+  modelType   String   @default("authorization") @map("model_type")
+  companySlug String   @map("company_slug")
+  company     Company  @relation(fields: [companySlug], references: [slug])
+  tags        Json
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  @@id([id, companySlug, modelType])
+  @@index([companySlug])
+  @@map("tags")
+}
+
+model Statement {
+  id                    String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  companySlug           String    @map("company_slug")
+  company               Company   @relation(fields: [companySlug], references: [slug])
+  date                  DateTime  @db.Date
+  beginningBalanceCents BigInt    @map("beginning_balance_cents")
+  endingBalanceCents    BigInt    @map("ending_balance_cents")
+  statementAmountCents  BigInt    @map("statement_amount_cents")
+  paymentsMade          Json      @map("payments_made")
+  status                String
+  paymentCreatedAt      DateTime? @map("payment_created_at")
+  transactionIds        String[]  @map("transaction_ids")
+  statementLength       String    @map("statement_length")
+  createdAt             DateTime  @default(now()) @map("created_at")
+  updatedAt             DateTime  @updatedAt @map("updated_at")
+  deletedAt             DateTime? @map("deleted_at")
+
+  @@unique([companySlug, date])
+  @@index([companySlug])
+  @@index([date])
+  @@map("statements")
+}
+
+model DepositAccountBalance {
+  id                    String              @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  companySlug           String              @map("company_slug")
+  company               Company             @relation(fields: [companySlug], references: [slug])
+  availableBalanceCents BigInt              @map("available_balance_cents")
+  currentBalanceCents   BigInt              @map("current_balance_cents")
+  refreshedAt           DateTime            @map("refreshed_at")
+  accountId             String              @map("account_id") @db.Uuid
+  account               PlaidDepositAccount @relation(fields: [accountId], references: [id])
+  createdAt             DateTime            @default(now()) @map("created_at")
+  updatedAt             DateTime            @updatedAt @map("updated_at")
+  deletedAt             DateTime?           @map("deleted_at")
+
+  @@index([companySlug])
+  @@map("deposit_account_balances")
+}
+
+model PlaidDepositAccount {
+  id                         String                  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  companySlug                String                  @map("company_slug")
+  company                    Company                 @relation(fields: [companySlug], references: [slug])
+  accountId                  String                  @map("account_id")
+  unitPrimaryCounterpartyId  String?                 @map("unit_counterparty_id")
+  unitFallbackCounterpartyId String?                 @map("unit_fallback_counterparty_id")
+  accessToken                String                  @map("access_token")
+  accountType                String?                 @map("account_type")
+  disconnectedAt             DateTime?               @map("disconnected_at")
+  createdAt                  DateTime                @default(now()) @map("created_at")
+  updatedAt                  DateTime                @updatedAt @map("updated_at")
+  balances                   DepositAccountBalance[]
+  deletedAt                  DateTime?               @map("deleted_at")
+
+  @@unique([companySlug, accountId])
+  @@index([companySlug])
+  @@map("plaid_deposit_accounts")
+}
+
+model TransactionFeedItem {
+  id                 String                   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  companySlug        String                   @map("company_slug")
+  company            Company                  @relation(fields: [companySlug], references: [slug])
+  plaidItemId        String                   @map("plaid_item_id")
+  plaidAccessToken   String                   @map("access_token")
+  plaidInstitutionId String                   @map("plaid_institution_id")
+  accounts           TransactionFeedAccount[]
+  transactionsCursor String?                  @map("transactions_cursor")
+  refreshedAt        DateTime?                @map("refreshed_at")
+  disconnectedAt     DateTime?                @map("disconnected_at")
+  createdAt          DateTime                 @default(now()) @map("created_at")
+  updatedAt          DateTime                 @updatedAt @map("updated_at")
+  deletedAt          DateTime?                @map("deleted_at")
+
+  @@unique([companySlug, plaidItemId])
+  @@index([companySlug])
+  @@map("transaction_feed_items")
+}
+
+model TransactionFeedAccount {
+  id                     String                       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  itemId                 String                       @map("item_id") @db.Uuid
+  item                   TransactionFeedItem          @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  plaidAccountId         String                       @map("plaid_account_id")
+  name                   String
+  mask                   String?
+  officialName           String?                      @map("official_name")
+  currentBalanceCents    BigInt?                      @map("current_balance_cents")
+  availableBalanceCents  BigInt?                      @map("available_balance_cents")
+  isoCurrencyCode        String?                      @map("iso_currency_code")
+  unofficialCurrencyCode String?                      @map("unofficial_currency_code")
+  type                   String
+  subtype                String?
+  transactions           TransactionFeedTransaction[]
+  createdAt              DateTime                     @default(now()) @map("created_at")
+  updatedAt              DateTime                     @updatedAt @map("updated_at")
+  deletedAt              DateTime?                    @map("deleted_at")
+
+  @@unique([itemId, plaidAccountId])
+  @@index([itemId])
+  @@map("transaction_feed_accounts")
+}
+
+model TransactionFeedTransaction {
+  id                             String                 @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  accountId                      String                 @map("account_id") @db.Uuid
+  account                        TransactionFeedAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  plaidAccountId                 String                 @map("plaid_account_id")
+  plaidTransactionId             String                 @map("plaid_transaction_id")
+  plaidPendingTransactionId      String?                @map("plaid_pending_transaction_id")
+  checkNumber                    String?                @map("check_number")
+  name                           String
+  merchantName                   String?                @map("merchant_name")
+  amountCents                    BigInt                 @map("amount_cents")
+  isoCurrencyCode                String?                @map("iso_currency_code")
+  unofficialCurrencyCode         String?                @map("unofficial_currency_code")
+  transactionCode                String?                @map("transaction_code")
+  date                           DateTime
+  datetime                       DateTime?
+  authorizedDate                 DateTime?              @map("authorized_date")
+  authorizedDatetime             DateTime?              @map("authorized_datetime")
+  pending                        Boolean
+  location                       Json?
+  paymentMeta                    Json?                  @map("payment_meta")
+  paymentChannel                 String                 @map("payment_channel")
+  personalFinanceCategory        Json?                  @map("personal_finance_category")
+  personalFinanceCategoryIconUrl String?                @map("personal_finance_category_icon_url")
+  counterparties                 Json?
+  plaidMerchantEntityId          String?                @map("plaid_merchant_entity_id")
+  accountOwner                   String?                @map("account_owner")
+  logoUrl                        String?                @map("logo_url")
+  website                        String?
+  createdAt                      DateTime               @default(now()) @map("created_at")
+  updatedAt                      DateTime               @updatedAt @map("updated_at")
+  importedAt                     DateTime?              @map("imported_at")
+  deletedAt                      DateTime?              @map("deleted_at")
+  dismissedAt                    DateTime?              @map("dismissed_at")
+
+  @@unique([plaidTransactionId, plaidAccountId])
+  @@index([accountId])
+  @@index([plaidTransactionId])
+  @@index([plaidPendingTransactionId])
+  @@map("transaction_feed_transactions")
+}
+
+model MerchantDiscount {
+  id               String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  companySlug      String?   @map("company_slug")
+  merchantName     String    @map("merchant_name")
+  discountCode     String    @map("discount_code")
+  discountCodeType String    @map("discount_code_type")
+  createdAt        DateTime  @default(now()) @map("created_at")
+  updatedAt        DateTime  @updatedAt @map("updated_at")
+  Company          Company?  @relation(fields: [companySlug], references: [slug])
+  deletedAt        DateTime? @map("deleted_at")
+
+  @@unique([discountCode])
+  @@unique([companySlug, merchantName, discountCodeType])
+  @@index([companySlug])
+  @@map("merchant_discounts")
+}
+
+model RewardProgram {
+  id                    String                 @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  startDate             DateTime               @map("start_date") @db.Date
+  programVersion        String                 @map("program_version")
+  rewardTiers           Json                   @map("reward_tiers")
+  createdAt             DateTime               @default(now()) @map("created_at")
+  updatedAt             DateTime               @updatedAt @map("updated_at")
+  customerRewardPeriods CustomerRewardPeriod[]
+
+  @@map("reward_programs")
+}
+
+model CustomerRewardPeriod {
+  id                          String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  companySlug                 String        @map("company_slug")
+  company                     Company       @relation(fields: [companySlug], references: [slug])
+  rewardProgram               RewardProgram @relation(fields: [rewardProgramId], references: [id])
+  rewardProgramId             String        @map("reward_program_id") @db.Uuid
+  startDate                   DateTime      @map("start_date") @db.Date
+  endDate                     DateTime      @map("end_date") @db.Date
+  tiersAchieved               Int[]         @map("tiers_achieved")
+  totalSpendCents             BigInt        @map("total_spend_cents")
+  beginningSpendRolloverCents BigInt        @map("beginning_spend_rollover_cents")
+  calculatedThrough           DateTime      @map("calculated_through_date")
+  transactionIds              String[]      @map("transaction_ids")
+  createdAt                   DateTime      @default(now()) @map("created_at")
+  updatedAt                   DateTime      @updatedAt @map("updated_at")
+  deletedAt                   DateTime?     @map("deleted_at")
+
+  @@unique([companySlug, startDate])
+  @@index([companySlug])
+  @@map("customer_reward_periods")
+}
+
+model IntuitAppConnection {
+  id                      String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  companySlug             String    @map("company_slug")
+  company                 Company   @relation(fields: [companySlug], references: [slug])
+  qboRealmId              String    @map("qbo_realm_id")
+  qboAccountId            String?   @map("qbo_account_id")
+  refreshToken            String    @map("refresh_token")
+  accessToken             String    @map("access_token")
+  tokenRefreshedAt        DateTime  @map("token_refreshed_at")
+  isQboAutoTaggingEnabled Boolean   @default(true) @map("is_auto_tagging_enabled")
+  disconnectedAt          DateTime? @map("disconnected_at")
+  createdAt               DateTime  @default(now()) @map("created_at")
+  updatedAt               DateTime  @updatedAt @map("updated_at")
+  deletedAt               DateTime? @map("deleted_at")
+  startedAt               DateTime? @map("started_at")
+
+  @@unique([companySlug, qboRealmId])
+  @@index([companySlug])
+  @@map("intuit_app_connections")
+}
+
+model UserSettings {
+  id                 String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId             String    @map("user_id")
+  defaultCompanySlug String    @map("default_company_slug")
+  defaultCompany     Company   @relation(fields: [defaultCompanySlug], references: [slug])
+  createdAt          DateTime  @default(now()) @map("created_at")
+  updatedAt          DateTime  @updatedAt @map("updated_at")
+  deletedAt          DateTime? @map("deleted_at")
+
+  @@unique([userId])
+  @@map("user_settings")
+}
+
+model ChildTransaction {
+  id                    String  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  unitTransactionId     String? @map("unit_transaction_id")
+  unitAuthorizationId   String? @map("unit_authorization_id")
+  importedTransactionId String? @map("imported_transaction_id")
+  amountCents           BigInt  @map("amount_cents")
+  summary               String?
+
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @default(now()) @updatedAt @map("updated_at")
+  deletedAt DateTime? @map("deleted_at")
+
+  @@map("child_transactions")
+}
+
+model Company {
+  id                    String                  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  unitCustomerId        String?                 @map("unit_customer_id")
+  name                  String
+  status                String                  @default("active")
+  tier                  String                  @default("lite")
+  slug                  String
+  isInternal            Boolean                 @default(false) @map("is_internal")
+  createdAt             DateTime                @default(now()) @map("created_at")
+  updatedAt             DateTime                @updatedAt @map("updated_at")
+  deletedAt             DateTime?               @map("deleted_at")
+  TeamSetting           TeamSetting?
+  Project               Project[]
+  UserInvite            UserInvite[]
+  UserPermission        UserPermission[]
+  CardRequest           CardRequest[]
+  Tag                   Tag[]
+  Statement             Statement[]
+  DepositAccountBalance DepositAccountBalance[]
+  PlaidDepositAccount   PlaidDepositAccount[]
+  TransactionFeedItem   TransactionFeedItem[]
+  MerchantDiscount      MerchantDiscount[]
+  CustomerRewardPeriod  CustomerRewardPeriod[]
+  IntuitAppConnection   IntuitAppConnection[]
+  UserSettings          UserSettings[]
+
+  @@unique([slug])
+  @@map("companies")
+}
+
+model VettedSoleProps {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  email     String
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@unique([email])
+  @@map("vetted_sole_props")
+}
